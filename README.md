@@ -17,7 +17,7 @@ The dataset contains property information from across the United States, featuri
 
 - ♻️ Sustainability Factors
 
-- 🏗️ Building Condition & Age
+- 🏗️ Building Condition 
 
 ## 🎯 Key Objectives
 
