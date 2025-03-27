@@ -149,7 +149,10 @@ hypothesis_plots_nc <- function(df,col1,levels,title){
  sig_plot <- (p1|p2)/p3 + 
    plot_annotation(
      title = title,
-     subtitle = paste0(" Wilcox Test p ~ ",p_value,""))
+     subtitle = paste0(" Wilcox Test p ~ ",p_value,"")) &
+   theme(
+     title = element_text(size = 10,face = "bold"),
+     plot.subtitle = element_text(face = "italic"))
  
  
  return(
@@ -158,28 +161,28 @@ hypothesis_plots_nc <- function(df,col1,levels,title){
 }
 
 # Plot ~Property_type
-hypothesis_plots_nc(hypothesis_data,col1 = "property_type",levels = c("apartment","bungalow"),title = "Diffrences betweem Apartment and Bungalow")
-hypothesis_plots_nc(hypothesis_data,col1 = "property_type",levels = c("container_home","bungalow"),title = "Diffrences betweem container_home and bungalow")
-hypothesis_plots_nc(hypothesis_data,col1 = "property_type",levels = c("duplex","apartment"),title =  "Diffrences betweem duplex and apartment")
-hypothesis_plots_nc(hypothesis_data,col1 = "property_type",levels = c("single_family_home","container_home"),title =  "Diffrences betweem Single family home and Container home")
+hypothesis_plots_nc(hypothesis_data,col1 = "property_type",levels = c("apartment","bungalow"),title = "Differences betweem Apartment and Bungalow")
+hypothesis_plots_nc(hypothesis_data,col1 = "property_type",levels = c("container_home","bungalow"),title = "Differences betweem container_home and bungalow")
+hypothesis_plots_nc(hypothesis_data,col1 = "property_type",levels = c("duplex","apartment"),title =  "Differences betweem duplex and apartment")
+hypothesis_plots_nc(hypothesis_data,col1 = "property_type",levels = c("single_family_home","container_home"),title =  "Differences betweem Single family home and Container home")
 
 # Plot ~ Furnishing
 kruskal.test(habitability_score ~ furnishing,data = hypothesis_data) #  p-value < 2.2e-16
 pairwise.wilcox.test(hypothesis_data$habitability_score,hypothesis_data$furnishing)
 
-hypothesis_plots_nc(hypothesis_data,col1 = "furnishing",levels = c("fully_furnished","unfurnished"),title = "Diffrences betweem Fully frnished and Unfurnished home")
+hypothesis_plots_nc(hypothesis_data,col1 = "furnishing",levels = c("fully_furnished","unfurnished"),title = "Differences between Fully furnished and Unfurnished home")
 
 # Plot ~ Crime Rate
 kruskal.test(habitability_score ~ crime_rate,data = hypothesis_data) # p-value < 2.2e-16
 pairwise.wilcox.test(hypothesis_data$habitability_score,hypothesis_data$crime_rate)
 
-hypothesis_plots_nc(hypothesis_data,col1 = "crime_rate",levels = c("well_above_average","well_below_average"),title = "Diffrences betweem Habitability score by Crime rate")
+hypothesis_plots_nc(hypothesis_data,col1 = "crime_rate",levels = c("well_above_average","well_below_average"),title = "Differences between Habitability score by Crime rate")
 
 # Plot ~ Dust and Noise
 kruskal.test(habitability_score ~ dust_and_noise,data = hypothesis_data) # p-value < 2.2e-16
 pairwise.wilcox.test(hypothesis_data$habitability_score,hypothesis_data$dust_and_noise)
 
-hypothesis_plots_nc(hypothesis_data,col1 = "dust_and_noise",levels = c("low","high"),title = "Diffrences betweem Habitability score by Dust and Noise")
+hypothesis_plots_nc(hypothesis_data,col1 = "dust_and_noise",levels = c("low","high"),title = "Differences betweem Habitability score by Dust and Noise")
 
 # Plot ~ Power Backup
 kruskal.test(habitability_score ~ power_backup,data = hypothesis_data)
