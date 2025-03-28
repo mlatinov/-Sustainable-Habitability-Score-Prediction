@@ -347,8 +347,6 @@ interact_func <- function(model,col1,col2){
         zaxis = list(title = "Predicted Value")
       )
     )
-  # Combine the plots in a 2x2 grid
-  final_plot <- subplot(plot_1_gg, plot_2_gg, plot_3_gg, plot_4, nrows = 2, shareX = TRUE, shareY = TRUE)
   # Return
   return(list(
     p1 <- plot_1,
@@ -358,7 +356,23 @@ interact_func <- function(model,col1,col2){
   ))
 } 
 
+# Plot number_of_windows ~ air_quality_index
 interact_func(model = rf,col1 = "number_of_windows",col2 = "air_quality_index")
 
+# Plot furnishing ~ power_backup interaction
+interact_func(model = rf,col1 = "furnishing",col2 = "power_backup")
 
+# Plot furnishing ~ neighborhood_review interaction
+interact_func(model = rf,col1 = "furnishing",col2 = "neighborhood_review")
 
+# Plot furnishing ~ property area interaction
+interact_func(model = rf,col1 = "furnishing",col2 = "property_area")
+
+# Plot Power_backup ~ neighborhood_review interaction
+interact_func(model = rf,col1 = "power_backup",col2 = "neighborhood_review")
+
+# Plot Power_backup ~ Property_area interaction
+interact_func(model = rf,col1 = "power_backup",col2 = "property_area")
+
+# Plot Property_area ~ neighborhood_review interaction
+interact_func(model = rf,col1 = "property_area",col2 = "neighborhood_review")
