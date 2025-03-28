@@ -5,6 +5,11 @@ library(psych)
 library(corrplot)
 library(naniar)
 library(patchwork)
+library(randomForest)
+library(vip)
+library(pdp)
+library(plotly)
+library(reshape2)
 
 # Load the data
 clean_train <- read_rds("clean_train")
@@ -287,10 +292,73 @@ hypothesis_plots_nn(df = hypothesis_data,col1 = "neighborhood_review",title = "H
 # Plot Habitability ~ traffic_density_score
 hypothesis_plots_nn(df = hypothesis_data,col1 = "traffic_density_score",title = "Habitability Score and Traffic Density")
 
-# Plot Habitability ~ frequency_of_powercuts
+# Plot Habitability ~ frequency_of_power cuts
 hypothesis_plots_nn(df = hypothesis_data,col1 = "frequency_of_powercuts",title = "Habitability Score and Frequency of powercuts")
 
 # Plot Habitability ~ number_of_windows
 hypothesis_plots_nn(df = hypothesis_data,col1 = "number_of_windows",title = "Habitability Score and Number of windows")
+
+#### Feature importance and interactions ####
+
+# Permutation based importance with basic RF model
+
+# Sample up to 5 000 
+hypothesis_data_sample <- hypothesis_data %>%
+  sample_n(5000)
+
+# Train RF
+rf <- randomForest(
+  habitability_score ~.,
+  data = hypothesis_data_sample,
+  importance = TRUE
+  )
+
+# Plot Variable importance
+vip(rf)
+
+# PDP function
+interact_func <- function(model,col1,col2){
+  
+  # Compute one way Partial dependence Plot for col1 and col2
+  pdp_1d_1 <- partial(model,pred.var = col1,plot = FALSE)
+  plot_1 <-plotPartial(pdp_1d_1)
+  
+  pdp_1d_2 <- partial(model,pred.var = col2,plot = FALSE)
+  plot_2 <- plotPartial(pdp_1d_2)
+  
+  # Compute col1 and col 2 interactions 
+  pdp_2d <- partial(object = model,pred.var = c(col1,col2),plot = FALSE)
+  plot_3 <-plotPartial(object = pdp_2d)
+  
+  # Add 3D plot_ly plot 
+  z <- acast(pdp_2d, as.formula(paste(col1, "~", col2)), value.var = "yhat")
+  
+  # Create 3D plot
+  plot_4 <- plot_ly(
+    x = unique(pdp_2d[[col1]]),
+    y = unique(pdp_2d[[col2]]),
+    z = z
+  ) %>%
+    add_surface() %>%
+    layout(
+      scene = list(
+        xaxis = list(title = col1),
+        yaxis = list(title = col2),
+        zaxis = list(title = "Predicted Value")
+      )
+    )
+  # Combine the plots in a 2x2 grid
+  final_plot <- subplot(plot_1_gg, plot_2_gg, plot_3_gg, plot_4, nrows = 2, shareX = TRUE, shareY = TRUE)
+  # Return
+  return(list(
+    p1 <- plot_1,
+    p2 <- plot_2,
+    p3 <- plot_3,
+    plot_4 <- plot_4
+  ))
+} 
+
+interact_func(model = rf,col1 = "number_of_windows",col2 = "air_quality_index")
+
 
 
