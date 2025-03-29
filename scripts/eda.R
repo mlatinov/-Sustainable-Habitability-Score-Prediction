@@ -3,13 +3,13 @@
 library(tidyverse)
 library(psych)
 library(corrplot)
-library(naniar)
 library(patchwork)
 library(randomForest)
 library(vip)
 library(pdp)
 library(plotly)
 library(reshape2)
+library(coin)
 
 # Load the data
 clean_train <- read_rds("clean_train")
@@ -79,10 +79,6 @@ clean_train %>%
     strip.text = element_text(size = 13,face = "italic"),
     axis.title = element_text(size = 13)
   )
-
-# Viz the missing data 
-vis_miss(clean_train,sort_miss = TRUE)
-  
 
 #### Hypothesis Testing ####
 # Sig level 0.05 *
@@ -316,8 +312,8 @@ rf <- randomForest(
 # Plot Variable importance
 vip(rf)
 
-# PDP function
-interact_func <- function(model,col1,col2){
+# Interact function
+interact_func <- function(model,col1,col2,df){
   
   # Compute one way Partial dependence Plot for col1 and col2
   pdp_1d_1 <- partial(model,pred.var = col1,plot = FALSE)
@@ -347,32 +343,49 @@ interact_func <- function(model,col1,col2){
         zaxis = list(title = "Predicted Value")
       )
     )
+  
+  # Permutation based interaction
+  interact <- coin::independence_test(habitability_score ~ get(col1) * get(col2),data = df)
+  
+  # RF model to get the importance of the interaction
+  formula_imp <- as.formula(paste("habitability_score ~ . +", col1, "*", col2))
+  
+  rf <- randomForest(
+    formula_imp,
+    data = df,
+    importance = TRUE)
+  
+  # Get the importance
+  rf_imp <- importance(rf)
+  
   # Return
   return(list(
-    p1 <- plot_1,
-    p2 <- plot_2,
-    p3 <- plot_3,
-    plot_4 <- plot_4
+    p1 =  plot_1,
+    p2 =  plot_2,
+    p3 =  plot_3,
+    plot_4 = plot_4,
+    permutaion_interact = interact,
+    rf_importance = rf_imp
   ))
 } 
 
-# Plot number_of_windows ~ air_quality_index
-interact_func(model = rf,col1 = "number_of_windows",col2 = "air_quality_index")
+# Plot number_of_windows ~ air_quality_index Asymptotic General Independence Test  p-value = 1.776e-15
+interact_func(model = rf,col1 = "number_of_windows",col2 = "air_quality_index",df = hypothesis_data_sample)
 
-# Plot furnishing ~ power_backup interaction
-interact_func(model = rf,col1 = "furnishing",col2 = "power_backup")
+# Plot furnishing ~ power_backup interaction Asymptotic General Independence Test  p-value < 2.2e-16
+interact_func(model = rf,col1 = "furnishing",col2 = "power_backup",df = hypothesis_data_sample)
 
-# Plot furnishing ~ neighborhood_review interaction
-interact_func(model = rf,col1 = "furnishing",col2 = "neighborhood_review")
+# Plot furnishing ~ neighborhood_review interaction Asymptotic General Independence Test  p-value < 2.2e-16
+interact_func(model = rf,col1 = "furnishing",col2 = "neighborhood_review",df = hypothesis_data_sample)
 
-# Plot furnishing ~ property area interaction
-interact_func(model = rf,col1 = "furnishing",col2 = "property_area")
+# Plot furnishing ~ property area interaction Asymptotic General Independence Test p-value < 2.2e-16
+interact_func(model = rf,col1 = "furnishing",col2 = "property_area",df = hypothesis_data_sample)
 
-# Plot Power_backup ~ neighborhood_review interaction
-interact_func(model = rf,col1 = "power_backup",col2 = "neighborhood_review")
+# Plot Power_backup ~ neighborhood_review interaction Asymptotic General Independence Test p-value < 2.2e-16
+interact_func(model = rf,col1 = "power_backup",col2 = "neighborhood_review",df = hypothesis_data_sample)
 
-# Plot Power_backup ~ Property_area interaction
-interact_func(model = rf,col1 = "power_backup",col2 = "property_area")
+# Plot Power_backup ~ Property_area interaction Asymptotic General Independence Test p-value < 2.2e-16
+interact_func(model = rf,col1 = "power_backup",col2 = "property_area",df = hypothesis_data_sample)
 
-# Plot Property_area ~ neighborhood_review interaction
-interact_func(model = rf,col1 = "property_area",col2 = "neighborhood_review")
+# Plot Property_area ~ neighborhood_review interaction Asymptotic General Independence Test  p-value < 2.2e-16
+interact_func(model = rf,col1 = "property_area",col2 = "neighborhood_review",df = hypothesis_data_sample)
