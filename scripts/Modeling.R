@@ -4,14 +4,23 @@ library(tidymodels)
 library(patchwork)
 library(tidyverse)
 library(baguette)
-library(ggpubr)
+library(future)
+library(doFuture)
+library(finetune)
+
+# Set up the env
+
+# Register doFuture as the parallel backend
+registerDoFuture()
+
+# Set up the parallel plan 
+plan(multisession, workers = 2)
+
+# Confirm the plan
+print(plan())
 
 ## Load the data 
 training_data <- read_rds("clean_train")
-
-# Create temporary sample to speed up the initial process
-training_data <- training_data %>%
-  sample_n(size = 10000)
 
 test_data <- read_rds("clean_test")
 
@@ -189,6 +198,8 @@ plot_3 <- ggplot(data = df_plot,aes(x = std_err, y = mean,color = model,shape = 
   geom_point(size = 3) +
   scale_color_viridis_d(option = "D",begin = 0.1,end = 0.7)+
   theme_minimal()+
+  ylim(c(5,8))+
+  xlim(c(0,0.3))+
   labs(
     title = "Scatter Plot",
     x = "Standart Error",
@@ -209,7 +220,115 @@ final_plot <- (plot_2 + plot_1) / plot_3  &
     title = element_text(size = 10,face = "bold")
   )
 
+# Plot
 final_plot
+
+#### Tuning Models ####
+
+# Parameters for tuning
+resamples <- vfold_cv(data = model_validation,v = 5)
+metrics <- metric_set(rmse)
+control <- control_bayes(
+  verbose = TRUE,
+  no_improve = 3,
+  seed = 123,time_limit = 3600,
+  parallel_over = "resamples")
+
+## Bag MLP
+
+# Bag mlp spec
+bad_mlp_tune <- bag_mlp(
+  hidden_units = tune(),
+  epochs = tune(),
+  penalty = tune()) %>%
+  set_mode("regression") %>%
+  set_engine("nnet")
+  
+# Create a workflow
+bag_mlp_workflow <- 
+  workflow() %>%
+  add_recipe(recipe_ni) %>% # Recipe with interactions
+  add_model(bad_mlp_tune)
+
+# Create a Search grid LHC
+bag_mlp_lhc <-
+  grid_space_filling(
+    hidden_units(range = c(10, 20)),   
+    epochs(range = c(50,80)),         
+    penalty(range = c(-1, 0))
+    )
+
+# Tune the Bag mlp
+initial_bag_mlp <- bag_mlp_workflow %>%
+  tune_grid(
+    resamples = resamples,
+    grid = bag_mlp_lhc,
+    metrics = metrics,
+    control = control_grid(
+      parallel_over = "everything",
+      verbose = TRUE))
+
+# bag mlp BO
+bag_mlp_bo <- bag_mlp_workflow %>%
+  tune_bayes(
+    resamples = resamples,
+    iter = 10,
+    metrics = metrics,
+    initial = initial_bag_mlp,
+    control = control)
+
+# Extract the best results
+bag_mlp_best <- bag_mlp_bo %>% select_best(metric = "rmse")
+
+# Finalize the model
+bag_mlp_final_workflow <- finalize_workflow(bag_mlp_workflow,bag_mlp_best)
+
+# Fit the final model on the training data 
+bag_mlp_final <- fit(bag_mlp_final_workflow,data = training_data)
+
+## RF 
+
+# RF Model spec
+rf_tuned <- rand_forest(
+  mtry = tune(),
+  min_n = tune(),
+  trees = tune()) %>%
+  set_engine("ranger") %>%
+  set_mode("regression")
+
+# Create a workflow 
+rf_workflow <- 
+  workflow() %>%
+  add_model(rf_tuned)%>%
+  add_recipe(recipe_in)
+
+# Create a Grid LHC
+rf_lhc <- grid_space_filling(
+  mtry(range = c(3,14)),
+  min_n(range = c(10,40)),
+  trees(range = c(150,250))
+)
+
+# Initial tuning
+rf_tuning <- rf_workflow %>%
+  tune_grid(
+    resamples = resamples,
+    grid = rf_lhc,
+    metrics = metrics,
+    control = control_grid(
+      parallel_over = "everything",
+      verbose = TRUE))
+
+# RF BO
+rf_bo <- rf_workflow %>%
+  tune_bayes(
+    resamples = resamples,
+    metrics = metrics,
+    initial = rf_tuning,
+    iter = 15,
+    control = control)
+
+
 
 
 
