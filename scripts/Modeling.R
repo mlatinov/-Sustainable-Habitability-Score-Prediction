@@ -7,6 +7,7 @@ library(baguette)
 library(future)
 library(doFuture)
 library(finetune)
+library(stacks)
 
 # Set up the env
 
@@ -228,11 +229,23 @@ final_plot
 # Parameters for tuning
 resamples <- vfold_cv(data = model_validation,v = 5)
 metrics <- metric_set(rmse)
+
+# Control for BO optimization
 control <- control_bayes(
   verbose = TRUE,
-  no_improve = 3,
-  seed = 123,time_limit = 3600,
-  parallel_over = "resamples")
+  no_improve = 5,
+  seed = 123,
+  time_limit = 3600,
+  parallel_over = "resamples",
+  save_pred = TRUE,
+  save_workflow = TRUE)
+
+# Tune control for initial tuning
+control_tune <- control_grid(
+  verbose = TRUE,
+  save_pred = TRUE,
+  save_workflow = TRUE,
+  parallel_over = "everything")
 
 ## Bag MLP
 
@@ -295,18 +308,28 @@ rf_tuned <- rand_forest(
   trees = tune()) %>%
   set_engine("ranger") %>%
   set_mode("regression")
-
-# Create a workflow 
+  
+# Create a workflow
 rf_workflow <- 
   workflow() %>%
   add_model(rf_tuned)%>%
   add_recipe(recipe_in)
+  
+extract_parameter_set_dials(rf_workflow)
+
+# Set parameters RF
+rf_param <- 
+  rf_workflow %>%
+  extract_parameter_set_dials() %>%
+  finalize(training_data) %>%
+  update(
+    mtry = mtry(c(1L,14L)),
+    min_n = min_n(c(3L,40L))
+  )
 
 # Create a Grid LHC
 rf_lhc <- grid_space_filling(
-  mtry(range = c(3,14)),
-  min_n(range = c(10,40)),
-  trees(range = c(150,250))
+  rf_param
 )
 
 # Initial tuning
@@ -324,10 +347,107 @@ rf_bo <- rf_workflow %>%
   tune_bayes(
     resamples = resamples,
     metrics = metrics,
+    param_info = rf_param,
     initial = rf_tuning,
     iter = 15,
     control = control)
 
+## XGB
+
+# XGB spec
+xgb_tune <- boost_tree(
+  mtry = tune(),
+  trees = tune(),
+  min_n = tune(),
+  learn_rate = tune(),
+  sample_size = tune(),
+  tree_depth = tune()) %>%
+  set_engine("xgboost") %>%
+  set_mode("regression")
+
+# XGB workflow 
+xgb_workflow <- 
+  workflow() %>%
+  add_model(xgb_tune) %>%
+  add_recipe(recipe_in)
+
+# Set params 
+xgb_params <- 
+  xgb_workflow %>%
+  extract_parameter_set_dials()%>%
+  finalize(training_data) %>%
+  update(
+    mtry = mtry(c(1L,14L))
+  )
+
+# Create a LHC Grid
+xgb_lhc <- xgb_params %>% grid_space_filling()
+  
+# Initial tune
+xgb_initial <- xgb_workflow %>%
+  tune_grid(
+    resamples = resamples,
+    grid = xgb_lhc,
+    metrics = metrics,
+    control = control_grid(
+      verbose = TRUE,
+      parallel_over = "everything"))
+
+# XGB BO 
+xgb_bo <- xgb_workflow %>%
+  tune_bayes(
+    resamples = resamples,
+    iter = 15,
+    param_info = xgb_params,
+    initial = xgb_initial,
+    metrics = metrics,
+    control = control)
+
+# Bagged Mars 
+
+# Bag Mars spec
+bag_mars_tune <- bag_mars(
+  num_terms = tune(),
+  prod_degree = tune()) %>%
+  set_engine("earth") %>%
+  set_mode("regression")
+
+# Create a workfow
+bag_mars_workflow <- 
+  workflow() %>%
+  add_model(bag_mars_tune) %>%
+  add_recipe(recipe_in)
+
+# Create a LHC grid
+bag_mars_lhc <- grid_space_filling(
+  num_terms(range = c(20,50)),
+  prod_degree(range = c(1,2))
+)
+
+# Tune the Bag_Mars initial
+bag_mars_inital <- bag_mars_workflow %>%
+  tune_grid(
+    resamples = resamples,
+    grid = bag_mars_lhc,
+    metrics = metrics,
+    control = control_grid(
+      verbose = TRUE,
+      parallel_over = "everything"))
+
+# Bagged Mars BO
+bag_mars_bo <- bag_mars_workflow %>%
+  tune_bayes(
+    resamples = resamples,
+    metrics = metrics,
+    iter = 15,
+    initial = bag_mars_inital,
+    control = control)
+
+## Stack Model 
+model_stack <- stacks() %>%
+  add_candidates(bag_mars_bo) %>%
+  add_candidates(rf_bo) %>%
+  add_candidates(bag_mlp_bo)
 
 
 
