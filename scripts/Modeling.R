@@ -266,10 +266,10 @@ bag_mlp_workflow <-
 # Create a Search grid LHC
 bag_mlp_lhc <-
   grid_space_filling(
-    hidden_units(range = c(10, 20)),   
+    hidden_units(range = c(15,30)),   
     epochs(range = c(50,80)),         
-    penalty(range = c(-1, 0))
-    )
+    penalty(range = c(-1, 0)),
+    size = 20)
 
 # Tune the Bag mlp
 initial_bag_mlp <- bag_mlp_workflow %>%
@@ -277,9 +277,7 @@ initial_bag_mlp <- bag_mlp_workflow %>%
     resamples = resamples,
     grid = bag_mlp_lhc,
     metrics = metrics,
-    control = control_grid(
-      parallel_over = "everything",
-      verbose = TRUE))
+    control = control_tune)
 
 # bag mlp BO
 bag_mlp_bo <- bag_mlp_workflow %>%
@@ -329,7 +327,7 @@ rf_param <-
 
 # Create a Grid LHC
 rf_lhc <- grid_space_filling(
-  rf_param
+  rf_param,size = 20
 )
 
 # Initial tuning
@@ -338,10 +336,8 @@ rf_tuning <- rf_workflow %>%
     resamples = resamples,
     grid = rf_lhc,
     metrics = metrics,
-    control = control_grid(
-      parallel_over = "everything",
-      verbose = TRUE))
-
+    control = control_tune)
+    
 # RF BO
 rf_bo <- rf_workflow %>%
   tune_bayes(
@@ -352,6 +348,9 @@ rf_bo <- rf_workflow %>%
     iter = 15,
     control = control)
 
+# Extract Best Params
+rf_best <- rf_bo %>% select_best()
+
 ## XGB
 
 # XGB spec
@@ -361,7 +360,8 @@ xgb_tune <- boost_tree(
   min_n = tune(),
   learn_rate = tune(),
   sample_size = tune(),
-  tree_depth = tune()) %>%
+  tree_depth = tune(),
+  loss_reduction = tune()) %>%
   set_engine("xgboost") %>%
   set_mode("regression")
 
@@ -377,11 +377,16 @@ xgb_params <-
   extract_parameter_set_dials()%>%
   finalize(training_data) %>%
   update(
-    mtry = mtry(c(1L,14L))
+    mtry = mtry(c(1L,14L)),
+    trees = trees(c(1000,3000)),
+    min_n = min_n(c(10,20)),
+    learn_rate = learn_rate(c(-10,-7)),
+    sample_size = sample_size(c(1,0)),
+    tree_depth = tree_depth(c(5,15))
   )
 
 # Create a LHC Grid
-xgb_lhc <- xgb_params %>% grid_space_filling()
+xgb_lhc <- xgb_params %>% grid_space_filling(size = 20)
   
 # Initial tune
 xgb_initial <- xgb_workflow %>%
@@ -389,9 +394,7 @@ xgb_initial <- xgb_workflow %>%
     resamples = resamples,
     grid = xgb_lhc,
     metrics = metrics,
-    control = control_grid(
-      verbose = TRUE,
-      parallel_over = "everything"))
+    control = control_tune)
 
 # XGB BO 
 xgb_bo <- xgb_workflow %>%
@@ -402,6 +405,9 @@ xgb_bo <- xgb_workflow %>%
     initial = xgb_initial,
     metrics = metrics,
     control = control)
+
+# Extract Best Params
+xgb_best <- xgb_bo %>% select_best()
 
 # Bagged Mars 
 
@@ -420,8 +426,9 @@ bag_mars_workflow <-
 
 # Create a LHC grid
 bag_mars_lhc <- grid_space_filling(
-  num_terms(range = c(20,50)),
-  prod_degree(range = c(1,2))
+  num_terms(range = c(30,60)),
+  prod_degree(range = c(2,3)),
+  size = 20
 )
 
 # Tune the Bag_Mars initial
@@ -430,9 +437,7 @@ bag_mars_inital <- bag_mars_workflow %>%
     resamples = resamples,
     grid = bag_mars_lhc,
     metrics = metrics,
-    control = control_grid(
-      verbose = TRUE,
-      parallel_over = "everything"))
+    control = control_tune)
 
 # Bagged Mars BO
 bag_mars_bo <- bag_mars_workflow %>%
@@ -443,12 +448,22 @@ bag_mars_bo <- bag_mars_workflow %>%
     initial = bag_mars_inital,
     control = control)
 
-## Stack Model 
-model_stack <- stacks() %>%
-  add_candidates(bag_mars_bo) %>%
-  add_candidates(rf_bo) %>%
-  add_candidates(bag_mlp_bo)
+# Extract Best Params
+bag_mars_best <- bag_mars_bo %>% select_best()
 
+# Predict and save the prediction
+prediction$pred <- predict(bag_mlp_final,new_data = test_data)
 
+test <- read_csv("test.csv")
+test_data$id <- as.numeric(as.character(test_data$id))
 
+submissions <- test %>%
+  select(Id) %>%
+  mutate(Habitability_score = prediction$.pred)
+
+# Save the prediction as csv
+write.csv(x = submissions,file = "submission.csv",row.names = FALSE)
+
+# Private Score : 5.90
+# Public Score : 5.68
 
